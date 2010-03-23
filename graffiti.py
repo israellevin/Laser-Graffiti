@@ -1,15 +1,20 @@
 # CONSTANTS - modify this part only #
 
-threshold = (100, 255, 100)
-color1 = (255, 255, 255)
-color2 = (255, 0, 0)
-color3 = (0, 255, 0)
-color4 = (0, 0, 255)
-color5 = (255, 255, 0)
-color6 = (255, 0, 255)
-color7 = (255, 255, 0)
-color8 = (0, 0, 0)
-color9 = (0, 0, 0)
+threshold1 = (255, 0, 0)
+color1a = (255, 0, 0)
+color1b = (0, 255, 0)
+color1c = (0, 0, 255)
+
+threshold2 = (0, 255, 0)
+color2a = (255, 0, 0)
+color2b = (0, 255, 0)
+color2c = (0, 0, 255)
+
+threshold3 = (0, 0, 255)
+color3a = (255, 0, 0)
+color3b = (0, 255, 0)
+color3c = (0, 0, 255)
+
 
 # CONSTANTS END - do not modify further down #
 
@@ -189,26 +194,28 @@ def calibrate():
     return (projRect, camRect)
 
 
+def makemask(r, g, b, th):
+    redmask = Image.eval(r, lambda i: 255 if i < th[0] else 0)
+    grnmask = Image.eval(g, lambda i: 255 if i < th[1] else 0)
+    blumask = Image.eval(b, lambda i: 255 if i < th[2] else 0)
+    mask = ImageChops.lighter(redmask, grnmask)
+    mask = ImageChops.lighter(mask, blumask)
+    return mask
+
+
 projRect, camRect = calibrate()
 curpic = cam.getImage()
-color = Image.new(screenMode, curpic.size, color1)
+color1 = Image.new(screenMode, curpic.size, color1a)
+color2 = Image.new(screenMode, curpic.size, color2a)
+color3 = Image.new(screenMode, curpic.size, color3a)
 composite = Image.new(screenMode, curpic.size)
 while True:
     curpic = cam.getImage()
-
-
     r, g, b = curpic.split()
-    redmask = Image.eval(r, lambda i: 255 if i < threshold[0] else 0)
-    grnmask = Image.eval(g, lambda i: 255 if i < threshold[1] else 0)
-    blumask = Image.eval(b, lambda i: 255 if i < threshold[2] else 0)
 
-    mask = ImageChops.lighter(redmask, grnmask)
-    mask = ImageChops.lighter(mask, blumask)
-
-    global composite
-    composite = Image.composite(composite, color, mask)
-    #composite = Image.composite(composite, grncolor, grnmask)
-    #composite = Image.composite(composite, blucolor, blumask)
+    composite = Image.composite(composite, color1, makemask(r, g, b, threshold1))
+    composite = Image.composite(composite, color2, makemask(r, g, b, threshold2))
+    composite = Image.composite(composite, color3, makemask(r, g, b, threshold3))
 
     showpic(composite.transform(screenSize, Image.QUAD, camRect.data))
 
@@ -216,34 +223,31 @@ while True:
     keyinput = pygame.key.get_pressed()
     if keyinput[pygame.K_ESCAPE] or pygame.event.peek(pygame.QUIT):
         raise SystemExit
-    if keyinput[pygame.K_0]:
-        composite = Image.new(screenMode, curpic.size)
-    if keyinput[pygame.K_1]:
-        color = Image.new(screenMode, curpic.size, color1)
-    if keyinput[pygame.K_2]:
-        color = Image.new(screenMode, curpic.size, color2)
-    if keyinput[pygame.K_3]:
-        color = Image.new(screenMode, curpic.size, color3)
-    if keyinput[pygame.K_4]:
-        color = Image.new(screenMode, curpic.size, color4)
-    if keyinput[pygame.K_5]:
-        color = Image.new(screenMode, curpic.size, color5)
-    if keyinput[pygame.K_6]:
-        color = Image.new(screenMode, curpic.size, color6)
-    if keyinput[pygame.K_7]:
-        color = Image.new(screenMode, curpic.size, color7)
-    if keyinput[pygame.K_8]:
-        color = Image.new(screenMode, curpic.size, color8)
-    if keyinput[pygame.K_9]:
-        color = Image.new(screenMode, curpic.size, color9)
     if keyinput[pygame.K_RETURN]:
         projRect, camRect = calibrate()
+    if keyinput[pygame.K_SPACE]:
+        composite = Image.new(screenMode, curpic.size)
+    if keyinput[pygame.K_q]:
+        color1 = Image.new(screenMode, curpic.size, color1a)
+    if keyinput[pygame.K_w]:
+        color1 = Image.new(screenMode, curpic.size, color1b)
+    if keyinput[pygame.K_e]:
+        color1 = Image.new(screenMode, curpic.size, color1c)
+    if keyinput[pygame.K_a]:
+        color2 = Image.new(screenMode, curpic.size, color2a)
+    if keyinput[pygame.K_s]:
+        color2 = Image.new(screenMode, curpic.size, color2b)
+    if keyinput[pygame.K_d]:
+        color2 = Image.new(screenMode, curpic.size, color2c)
+    if keyinput[pygame.K_z]:
+        color3 = Image.new(screenMode, curpic.size, color3a)
+    if keyinput[pygame.K_x]:
+        color3 = Image.new(screenMode, curpic.size, color3b)
+    if keyinput[pygame.K_c]:
+        color3 = Image.new(screenMode, curpic.size, color3c)
 
 
 graffiti()
-
-
-
 
 
 #    pas = []
