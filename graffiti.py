@@ -28,7 +28,8 @@ from time import sleep
 
 
 pygame.init()
-screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+screen = pygame.display.set_mode((640, 480), pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF)
+screen.set_colorkey((0, 0, 0))
 info = pygame.display.Info()
 screenWidth = info.current_w
 screenHeight = info.current_h
@@ -58,6 +59,9 @@ def showvid():
         keyinput = pygame.key.get_pressed()
         if keyinput[pygame.K_ESCAPE] or pygame.event.peek(pygame.QUIT):
             return
+        if keyinput[pygame.K_SPACE]:
+            cam.displayCaptureFilterProperties()
+            cam.displayCapturePinProperties()
 
         showpic(cam.getImage())
 
@@ -216,7 +220,6 @@ while True:
     composite = Image.composite(composite, color1, makemask(r, g, b, threshold1))
     composite = Image.composite(composite, color2, makemask(r, g, b, threshold2))
     composite = Image.composite(composite, color3, makemask(r, g, b, threshold3))
-
     showpic(composite.transform(screenSize, Image.QUAD, camRect.data))
 
     pygame.event.pump()
@@ -245,28 +248,3 @@ while True:
         color3 = Image.new(screenMode, curpic.size, color3b)
     if keyinput[pygame.K_c]:
         color3 = Image.new(screenMode, curpic.size, color3c)
-
-
-graffiti()
-
-
-#    pas = []
-#    pix = curpic.load()
-#    for x in range(camSize[0]):
-#        for y in range(camSize[1]):
-#            if pix[x, y][0] > threshold[0] and pix[x, y][1] > threshold[1] and pix[x, y][2] > threshold[2]:
-#                pas.append((x, y))
-#    if len(pas) > threshold[3]:
-#        tot = [0, 0]
-#        for i in pas:
-#            tot[0] += i[0]
-#            tot[1] += i[1]
-#        x = tot[0] / len(pas)
-#        y = tot[1] / len(pas)
-#        draw = ImageDraw.Draw(composite)
-#        draw.ellipse((x - 1, y - 1, x + 1, y + 1), fill = color3)
-#        x = self.coords[self.active]
-#        y = self.coords[self.active + 1]
-#        draw.rectangle((x - 5, y - 5, x + 5, y + 5), fill = (55, 0, 0))
-#        showpic(curpic)
-
