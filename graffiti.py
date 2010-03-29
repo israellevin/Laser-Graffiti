@@ -1,17 +1,24 @@
 import Image
 import pyglet
 
+guiwindow = pyglet.window.Window()
+#guiwindow.push_handlers(pyglet.window.event.WindowEventLogger())
+
+@guiwindow.event
+def on_key_press(symbol, modifiers):
+    if symbol == pyglet.window.key.ESCAPE:
+        pyglet.app.exit()
+
+@guiwindow.event
+def on_mouse_press(x, y, button, modifiers):
+    if button == pyglet.window.mouse.LEFT:
+        print x, y
+
+
 screens = pyglet.window.get_platform().get_default_display().get_screens()
-window = pyglet.window.Window(fullscreen = True, screen = screen)
-#window.push_handlers(pyglet.window.event.WindowEventLogger())
-#label = pyglet.text.Label('Yo')
+vidwindow = pyglet.window.Window(fullscreen = True, screen = screens[-1])
 
-@window.event
-def on_draw():
-    pass
-    #window.clear()
-
-@window.event
+@vidwindow.event
 def on_key_press(symbol, modifiers):
     if symbol == pyglet.window.key.ESCAPE:
         pyglet.app.exit()
@@ -21,11 +28,8 @@ def on_key_press(symbol, modifiers):
         m = pilimg.mode
         d = pilimg.tostring()
         i = pyglet.image.ImageData(w, h, m, d, (-1 * w * len(m)))
+        vidwindow.switch_to()
         i.blit(0, 0)
 
-@window.event
-def on_mouse_press(x, y, button, modifiers):
-    if button == pyglet.window.mouse.LEFT:
-        print x, y
 
 pyglet.app.run()
