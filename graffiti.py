@@ -24,31 +24,48 @@ class Quad:
     def __init__(self):
         wf = camSize[0] / 3
         hf = camSize[1] / 3
-        self.coordinates = [wf, hf, wf, hf*2, wf*2, hf*2, wf*2, hf]
+        self.coords = [wf, hf, wf, hf*2, wf*2, hf*2, wf*2, hf]
         self.matrix = False
 
     def moveCorner(self, x, y):
         minp = 9999
         closest = 0
         for i in range(4):
-            p = distance(self.coordinates[i*2], self.coordinates[i*2+1], x, y)
+            p = distance(self.coords[i*2], self.coords[i*2+1], x, y)
             if p < minp:
                 minp = p
                 closest = i
-        self.coordinates[closest*2:closest*2+2] = [x, y]
+        self.coords[closest*2:closest*2+2] = [x, y]
 
     def draw(self):
         guiwindow.switch_to()
-        pyglet.graphics.draw(4, pyglet.gl.GL_QUADS, ('v2i', self.coordinates))
+        pyglet.graphics.draw(4, pyglet.gl.GL_QUADS, ('v2i', self.coords))
 
     def calculate(self):
-        d = min(self.coordinates[1], self.coordinates[3], self.coordinates[5], self.coordinates[7])
-        l = min(self.coordinates[0], self.coordinates[2], self.coordinates[4], self.coordinates[6])
-        u = max(self.coordinates[1], self.coordinates[3], self.coordinates[5], self.coordinates[7])
-        r = max(self.coordinates[0], self.coordinates[2], self.coordinates[4], self.coordinates[6])
+        matrix = []
+
+        nw = self.coords[0:2]
+        sw = self.coords[2:4]
+        se = self.coords[4:6]
+        ne = self.coords[6:8]
+        x0, y0 = nw
+        As = 1.0 / w
+        At = 1.0 / h
+        coefs = (x0, (ne[0]-x0)*As, (sw[0]-x0)*At,
+                (se[0]-sw[0]-ne[0]+x0)*As*At,
+                y0, (ne[1]-y0)*As, (sw[1]-y0)*At,
+                (se[1]-sw[1]-ne[1]+y0)*As*At)
+
+        d = min(self.coords[1], self.coords[3], self.coords[5], self.coords[7])
+        l = min(self.coords[0], self.coords[2], self.coords[4], self.coords[6])
+        u = max(self.coords[1], self.coords[3], self.coords[5], self.coords[7])
+        r = max(self.coords[0], self.coords[2], self.coords[4], self.coords[6])
 
         for row in range(d, u + 1):
             for col in range(l, r + 1):
+                x = (coefs[0] * col + coefs[1] * row + coefs[2]) / (coefs[6] * col + coefs[7] * row + 1)
+                y = (coefs[3] * col + coefs[4] * row + coefs[5]) / (coefs[6] * col + coefs[7] * row + 1)
+                matrix.append((row, col, x, y))
 
 quad = Quad()
 
