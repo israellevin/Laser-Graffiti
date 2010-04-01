@@ -3,13 +3,13 @@ import math
 import Image
 import pyglet
 
+campic = pyglet.image.load('tmp.png')
+
 def frange(start, stop, step):
     i = start
     while i < stop:
         yield i
         i += step
-
-campic = pyglet.image.load('tmp.png')
 
 class Coord:
     def __init__(self, x, y):
@@ -35,8 +35,6 @@ class Line:
         self.a = a
         self.b = b
         self.length = a.distance(b)
-        self.sqrlen = pow(self.length, 2)
-        self.slope = 0.0 if b.y == a.y else (b.x - a.x) / (b.y - a.y)
         self.xdif = b.x - a.x
         self.ydif = b.y - a.y
     def point(self, fact):
@@ -44,24 +42,21 @@ class Line:
         y = int(round(self.a.y + (self.ydif * fact)))
         return Coord(x, y)
 
-
-sw = Coord(0, 0)
+sw = Coord(250, 0)
 se = Coord(500, 0)
-ne = Coord(500, 500)
-nw = Coord(0, 500)
+ne = Coord(500, 50)
+nw = Coord(250, 100)
 
 s = Line(sw, se)
 w = Line(sw, nw)
 n = Line(nw, ne)
-e = Line(sw, ne)
+e = Line(se, ne)
 
 projw = Line(Coord(0, 0), Coord(0, campic.height))
 proje = Line(Coord(campic.width, 0), Coord(campic.width, campic.height))
 
 xsteps = int(max(s.length, n.length) + 1)
 ysteps = int(max(w.length, e.length) + 1)
-
-print xsteps * ysteps
 
 matrix = []
 for row in frange(0, 1, 1.0 / ysteps):
@@ -80,13 +75,15 @@ def on_key_press(symbol, modifiers):
         pyglet.app.exit()
     elif symbol == pyglet.window.key.RETURN:
         campic.blit(0, 0)
+        pyglet.graphics.draw(4, pyglet.gl.GL_QUADS, ('v2i', sw.xy + nw.xy + ne.xy + se.xy))
     elif symbol == pyglet.window.key.SPACE:
-        campix = campic.get_data('RGB', campic.width * -3)
-        projimg = pyglet.image.ImageData(campic.width, campic.height, 'RGB', chr(0) * 3 * campic.width * campic.height)
+        campic1 = pyglet.image.load('tmp.png')
+        campix = campic1.get_data('RGB', -3 * campic.width)
+        projimg = pyglet.image.ImageData(campic.width, campic.height, 'RGB', chr(0) * 3 * campic.width * campic.height, pitch = -3 * campic.width)
         projpix = [0 for i in range(3 * projimg.width * projimg.height)]
         for point in matrix:
-            cami = (point[0] + (point[1] * campic.width)) * 3
-            proji = (point[2] + (point[3] * campic.width)) * 3
+            cami = -3 * ((point[1] * campic.width) - point[0])
+            proji = -3 * ((point[3] * campic.width) - point[2])
             try:
                 for i in range(3):
                     projpix[proji + i] = campix[cami + i]
@@ -95,7 +92,7 @@ def on_key_press(symbol, modifiers):
         c = ''
         for i in projpix:
             c += chr(i)
-        projimg.set_data('RGB', projimg.width * -3, c)
+        projimg.set_data('RGB', -3 * projimg.width, c)
         projimg.blit(0, 0)
 
 pyglet.app.run()
