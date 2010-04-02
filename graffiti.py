@@ -1,9 +1,58 @@
-import VideoCapture
+import sys
+#import VideoCapture
+import math
 import Image
 import pyglet
-import math
 
-import time
+def frange(start, stop, step):
+    i = start
+    while i < stop:
+        yield i
+        i += step
+
+
+#class Cam(VideoCapture.Device):
+class Cam():
+    def __init__(self):
+        #VideoCapture.Device.__init__(self)
+        img = self.getImage()
+        self.width, self.height = img.size
+        self.mode = img.mode
+        self.pitch = -1 * self.width * len(self.mode)
+
+    def getPygImage(self):
+        img = self.getImage()
+        w = self.width
+        h = self.height
+        m = self.mode
+        d = img.tostring()
+        p = self.pitch
+        return pyglet.image.ImageData(w, h, m, d, p)
+    
+    def getImage(self):
+        return Image.open('tmp.png')
+
+cam = Cam()
+
+
+screens = pyglet.window.get_platform().get_default_display().get_screens()
+
+class Projection:
+    def __init__(self):
+        self.screen = screens[-1]
+        self.width = self.screen.width
+        self.height = self.screen.height
+        self.mode = cam.mode
+        self.pitch = -1 * self.width * len(self.mode)
+        self.img = pyglet.image.ImageData(self.width, self.height, 'RGB', (chr(255) + chr(0) + chr(0)) * self.width * self.height)
+        #self.win = pyglet.window.Window(fullscreen = (False if len(screens) < 2 else True), screen = self.screen)
+        self.win = pyglet.window.Window(self.width, self.height)
+
+    def draw(self):
+        self.win.switch_to()
+        self.img.blit(0, 0)
+
+projection = Projection()
 
 
 class Coord:
@@ -11,9 +60,11 @@ class Coord:
         self.x = x
         self.y = y
         self.xy = (x, y)
+
     def flat(self):
         yield self.x
         yield self.y
+
     def distance(self, *params):
         if len(params) == 1:
             x = params[0].x
@@ -30,40 +81,18 @@ class Line:
         self.a = a
         self.b = b
         self.length = a.distance(b)
-        self.sqrlen = pow(self.length, 2)
+        self.xdif = b.x - a.x
+        self.ydif = b.y - a.y
 
-class Triangle:
-    def __init__(self, a, b, c):
-        self.a = a
-        self.b = b
-        self.c = c
-        self.ab = Line(a, b)
-        self.bc = Line(b, c)
-        self.ca = Line(c, a)
-        #self.alpha = math.degrees(math.acos((self.bc.sqrlen + self.ca.sqrlen - self.ab.sqrlen) / (2.0 * self.bc.length * self.ca.length)))
-        #self.beta = math.degrees(math.acos((self.ab.sqrlen + self.ca.sqrlen - self.bc.sqrlen) / (2.0 * self.ab.length * self.ca.length)))
-        #self.gamma = math.degrees(math.acos((self.ab.sqrlen + self.bc.sqrlen - self.ca.sqrlen) / (2.0 * self.ab.length * self.bc.length)))
-        self.hca = math.sqrt((self.ab.length + self.bc.length + self.ca.length) * (self.ab.length + self.bc.length - self.ca.length) * (self.ab.length - self.bc.length + self.ca.length) * (- self.ab.length + self.bc.length + self.ca.length)) / (2 * self.ca.length)
-
-
-class Cam(VideoCapture.Device):
-    def getPygImage(self):
-        img = self.getImage()
-        w, h = img.size
-        m = img.mode
-        d = img.tostring()
-        return pyglet.image.ImageData(w, h, m, d, (-1 * w * len(m)))
-
-cam = Cam() #VideoCapture.Device()
-campic = cam.getImage()
-camSize = campic.size
-camMode = campic.mode
-
+    def point(self, fact):
+        x = int(round(self.a.x + (self.xdif * fact)))
+        y = int(round(self.a.y + (self.ydif * fact)))
+        return Coord(x, y)
 
 class Quad:
     def __init__(self):
-        wf = camSize[0] / 3
-        hf = camSize[1] / 3
+        wf = cam.width / 3
+        hf = cam.height / 3
         self.coords = [Coord(wf, hf), Coord(wf, hf*2), Coord(wf*2, hf*2), Coord(wf*2, hf)]
         self.matrix = False
 
@@ -83,66 +112,30 @@ class Quad:
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS, ('v2i', coords))
 
     def calculate(self):
+        s = Line(self.coords[0], self.coords[3])
+        w = Line(self.coords[0], self.coords[1])
+        n = Line(self.coords[1], self.coords[2])
+        e = Line(self.coords[3], self.coords[2])
+
+        projw = Line(Coord(0, 0), Coord(0, projection.height))
+        proje = Line(Coord(projection.width, 0), Coord(projection.width, projection.height))
+
+        xsteps = int(max(s.length, n.length) + 1)
+        ysteps = int(max(w.length, e.length) + 1)
+
         self.matrix = []
-        sw = self.coords[0].xy
-        nw = self.coords[1].xy
-        ne = self.coords[2].xy
-        se = self.coords[3].xy
-        x0, y0 = nw
-        As = 1.0 / projection.width #camSize[0]
-        At = 1.0 / projection.height #camSize[1]
-        a0 = x0
-        a1 = (ne[0]-x0)*As
-        a2 = (sw[0]-x0)*At
-        a3 = (se[0]-sw[0]-ne[0]+x0)*As*At
-        a4 = y0
-        a5 = (ne[1]-y0)*As
-        a6 = (sw[1]-y0)*At
-        a7 = (se[1]-sw[1]-ne[1]+y0)*As*At
-        l = min([c.x for c in self.coords])
-        r = max([c.x for c in self.coords])
-        d = min([c.y for c in self.coords])
-        u = max([c.y for c in self.coords])
-        for row in range(d, u + 1):
-            for col in range(l, r + 1):
-                x = a0 + a1*col + a2*row + a3*col*row;
-                y = a4 + a5*col + a6*row + a7*col*row;
-                if x < 0 or y < 0 or x > camSize[0] or y > camSize[1]:
-                    print x, y
-                else:
-                    self.matrix.append((int(x), int(y)))
-#b = Coord(row, col)
-#altitudes = []
-#for i in range(4):
-#    a = self.coords[i]
-#    c = self.coords[(i + 1) % 4]
-#    t = Triangle(a, b, c)
-#    altitudes.append(t.hca)
-#x = row * (altitudes[1] / altitudes[3])
-#y = row * (altitudes[0] / altitudes[2])
-#self.matrix.append((row, col, x, y))
+        for row in frange(0, 1, 1.0 / ysteps):
+            camrow = Line(w.point(row), e.point(row))
+            projrow = Line(projw.point(row), proje.point(row))
+            for col in frange(0, 1, 1.0 / xsteps):
+                cp = camrow.point(col)
+                pp = projrow.point(col)
+                self.matrix.append((cp.x, cp.y, pp.x, pp.y))
 
 quad = Quad()
 
 
-screens = pyglet.window.get_platform().get_default_display().get_screens()
-
-class Projection:
-    def __init__(self):
-        self.screen = screens[-1]
-        self.width = self.screen.width
-        self.height = self.screen.height
-        self.img = pyglet.image.ImageData(self.width, self.height, 'RGB', (chr(255) + chr(0) + chr(0)) * self.width * self.height)
-        self.win = pyglet.window.Window(fullscreen = False, screen = self.screen)
-
-    def draw(self):
-        self.win.switch_to()
-        self.img.blit(0, 0)
-
-projection = Projection()
-
-
-guiwindow = pyglet.window.Window(camSize[0], camSize[1])
+guiwindow = pyglet.window.Window(cam.width, cam.height)
 
 @guiwindow.event
 def on_close():
@@ -152,27 +145,26 @@ def on_close():
 def on_key_press(symbol, modifiers):
     if symbol == pyglet.window.key.ESCAPE:
         pyglet.app.exit()
+
     if symbol == pyglet.window.key.RETURN:
-        t = time.time()
         quad.calculate()
-        print len(quad.matrix)
-        print len(set(quad.matrix))
-        camimg = cam.getImage()
-        campix = camimg.tostring()
-        projimg = projection.img
-        projpix = [0 for i in range(projimg.width * projimg.height * 3)]
+        curpic = cam.getPygImage()
+        campix = curpic.get_data(cam.mode, cam.pitch)
+        projection.img = pyglet.image.ImageData(projection.width, projection.height, projection.mode, chr(0) * len(projection.mode) * projection.width * projection.height, pitch = projection.pitch)
+        projpix = [0 for i in range(len(projection.mode) * projection.width * projection.height)]
         for point in quad.matrix:
-            cami = int(((point[0] + point[1]) * camimg.size[0]) * 3)
-            proji = int(((point[1] + point[2]) * projimg.width) * 3)
+            cami = -3 * ((point[1] * cam.width) - point[0])
+            proji = -3 * ((point[3] * projection.width) - point[2])
             try:
                 for i in range(3):
-                    projpix[proji + i] = 255 #ord(campix[cami + i])
+                    projpix[proji + i] = ord(campix[cami + i])
             except IndexError:
                 pass
         c = ''
         for i in projpix:
             c += chr(i)
-        projection.img.set_data('RGB', projimg.width * 3, c)
+        projection.img.set_data(projection.mode, projection.pitch, c)
+
 
 @guiwindow.event
 def on_mouse_press(x, y, button, modifiers):
