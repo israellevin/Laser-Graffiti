@@ -1,20 +1,17 @@
 # CONSTANTS - modify this part only #
 
-threshold1 = [.8, .8, .8]
-color1a = (255, 0, 0)
-color1b = (0, 255, 0)
-color1c = (0, 0, 255)
+COLORS = ((0, 0, 0, 127),
+          (0, 0, 127, 127),
+          (0, 127, 0, 127),
+          (0, 127, 127, 127),
+          (127, 0, 0, 127),
+          (127, 0, 127, 127),
+          (127, 127, 0, 127),
+          (127, 127, 127, 127))
 
-threshold2 = (0, 255, 0)
-color2a = (255, 0, 0)
-color2b = (0, 255, 0)
-color2c = (0, 0, 255)
-
-threshold3 = (0, 0, 255)
-color3a = (255, 0, 0)
-color3b = (0, 255, 0)
-color3c = (0, 0, 255)
-
+THRESHOLDS = ([.8, .8, .8],)
+#              [1, 1, 1],
+#              [1, 1, 1])
 
 # CONSTANTS END - do not modify further down #
 
@@ -88,17 +85,16 @@ class Projection:
                 ('v2i', (0, 0, 0, self.height, self.width, self.height, self.width, 0)),
                 ('c4b', (r, g, b, 127) * 4))
 
-    def draw(self, x = False, y = False, size = 40, sides = 16):
+    def draw(self, x = False, y = False, size = 40, sides = 16, rgb = (0, 0, 0)):
         if False != x and False != y:
             coords = []
             for i in range(sides):
                 coords.append(int(round(x + size * math.cos(i * 2 * math.pi / sides))))
                 coords.append(int(round(y + size * math.sin(i * 2 * math.pi / sides))))
             self.win.switch_to()
-
             pyglet.graphics.draw(len(coords) / 2, pyglet.gl.GL_TRIANGLE_FAN,
                 ('v2i', coords),
-                ('c4b', (0, 0, 0, 127) * 16))
+                ('c4b', (rgb[0], rgb[1], rgb[2], 127) * 16))
 
 projection = Projection()
 
@@ -155,8 +151,8 @@ class Quad:
         self.coords[closest].x, self.coords[closest].y = x, y
 
     def draw(self):
-        gui.switch_to()
         coords = [i for c in self.coords for i in c.flat()]
+        gui.switch_to()
         pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
                 ('v2i', coords),
                 ('c4b', (127, 0, 0, 127) * 4))
@@ -182,7 +178,7 @@ class Quad:
                 pp = projrow.point(col)
                 self.matrix.append((cp.x, cp.y, pp.x, pp.y))
 
-    def getpoint(self):
+    def getpoint(self, threshold):
         if False == self.matrix:
             return False
         img = cam.getPygImage().get_data(cam.mode, cam.pitch)
@@ -191,9 +187,9 @@ class Quad:
         for point in self.matrix:
             cami = -3 * ((point[1] * cam.width) - point[0])
             try:
-                if ord(img[cami]) > 255.0 * threshold1[0]:
-                    if ord(img[cami + 1]) > 255.0 * threshold1[1]:
-                        if ord(img[cami + 2]) > 255.0 * threshold1[2]:
+                if ord(img[cami]) > 255.0 * threshold[0]:
+                    if ord(img[cami + 1]) > 255.0 * threshold[1]:
+                        if ord(img[cami + 2]) > 255.0 * threshold[2]:
                             detectedxs.append(point[2])
                             detectedys.append(point[3])
             except IndexError:
@@ -210,27 +206,58 @@ quad = Quad()
 class Colslider(slider.Slider):
     def __init__(self, parent, idx):
         self.idx = idx
-        slider.Slider.__init__(self, x = 0, y = cam.height * 2 + 10 + idx * 30, width = cam.width, value = threshold1[idx])
-        parent.push_handlers(self)
+        slider.Slider.__init__(self,
+                x = (len(parent.parent.colorctls) + 1) * cam.width,
+                y = cam.height + (idx * 30) + 40,
+                width = cam.width, value = parent.threshold[idx])
+        parent.parent.push_handlers(self)
 
         @self.event
         def on_value_change(slider):
-            threshold1[slider.idx] = slider.value
-            parent.clear()
-            parent.draw()
+            parent.threshold[slider.idx] = slider.value
+            parent.parent.clear()
+            parent.parent.draw()
 
-class Sliders():
-    def __init__(self, parent):
-        self.red = Colslider(parent, 0)
-        self.grn = Colslider(parent, 1)
-        self.blu = Colslider(parent, 2)
+class Colorctl():
+    def __init__(self, threshold, color, parent):
+        self.threshold = threshold[:]
+        self.color = color
+        self.parent = parent
+        self.img = cam.getPygImage(self.threshold)
+        self.x = cam.width * (1 + len(parent.colorctls))
+        self.red = Colslider(self, 0)
+        self.grn = Colslider(self, 1)
+        self.blu = Colslider(self, 2)
+    def draw(self):
+        if False != quad.matrix:
+            p = quad.getpoint(self.threshold)
+            if False != p:
+                projection.draw(p.x, p.y, rgb = COLORS[self.color])
+        #else:
+        self.img = cam.getPygImage(self.threshold)
+        colors = [b for c in COLORS for i in range(4) for b in c]
+        coords = []
+        for i in range(8):
+            x1 = self.x + (i * (cam.width / 8))
+            x2 = x1 + (cam.width / 8)
+            y1 = cam.height
+            y2 = y1 + 30
+            coords += [x1, y1, x1, y2, x2, y2, x2, y1]
+        gui.switch_to()
+        pyglet.graphics.draw(len(coords) / 2, pyglet.gl.GL_QUADS,
+                ('v2i', coords),
+                ('c4b', colors))
+        self.img.blit(self.x, 0)
 
 class Gui(pyglet.window.Window):
     def __init__(self):
         self.img = cam.getPygImage()
-        self.mask = cam.getPygImage(threshold1)
-        self.sliders = Sliders(self)
-        pyglet.window.Window.__init__(self, width = cam.width, height = cam.height * 2 + 100)
+        self.colorctls = []
+        for th in THRESHOLDS:
+            self.colorctls.append(Colorctl(th, 0, self))
+        pyglet.window.Window.__init__(self,
+                width = cam.width * (1 + len(self.colorctls)),
+                height = cam.height + 130)
 
     def on_close(self):
         pyglet.app.exit()
@@ -239,27 +266,36 @@ class Gui(pyglet.window.Window):
         if symbol == pyglet.window.key.ESCAPE:
             pyglet.app.exit()
 
-        if symbol == pyglet.window.key.RETURN:
-            quad.calculate()
-
-        if symbol == pyglet.window.key.SPACE:
-            projection.wipescreen(r = 127, g = 127, b = 127)
-            quad.matrix = False
-
-    def on_mouse_press(self, x, y, button, modifiers):
+    def on_mouse(self, x, y, button, modifiers):
+        if button == pyglet.window.mouse.RIGHT:
+            if False == quad.matrix:
+                quad.calculate()
+            else:
+                quad.matrix = False
+            return pyglet.event.EVENT_HANDLED
         if button == pyglet.window.mouse.LEFT:
-            if y < cam.height:
+            if x > 0 and y > 0 and y < cam.height and x < cam.width:
                 quad.moveCorner(x, y)
                 return pyglet.event.EVENT_HANDLED
+            elif x > cam.width and y > cam.height and y - cam.height < 30:
+                ctli = (x / cam.width) - 1
+                coli = x % cam.width / (cam.width / 8)
+                self.colorctls[ctli].color = coli
             else:
                 return pyglet.event.EVENT_UNHANDLED
 
+    def on_mouse_press(self, x, y, button, modifiers):
+        self.on_mouse(x, y, button, modifiers)
+
+    def on_mouse_drag(self, x, y, dx, dy, button, modifiers):
+        self.on_mouse(x, y, button, modifiers)
+
     def draw(self):
         self.img = cam.getPygImage()
-        self.mask = cam.getPygImage(threshold1)
         gui.switch_to()
         self.img.blit(0, 0)
-        self.mask.blit(0, cam.height)
+        for color in self.colorctls:
+            color.draw()
 
 gui = Gui()
 
@@ -272,11 +308,15 @@ def update(dt):
     gui.draw()
 
     if False == quad.matrix:
+        projection.wipescreen(127, 127, 127)
         quad.draw()
     else:
-        p = quad.getpoint()
-        if False != p:
-            projection.draw(p.x, p.y)
+        for color in gui.colorctls:
+            color.draw()
 
-pyglet.clock.schedule_interval(update, 0.05)
+    #gui.switch_to()
+    #fps_display.draw()
+
+#fps_display = pyglet.clock.ClockDisplay()
+pyglet.clock.schedule(update)
 pyglet.app.run()
