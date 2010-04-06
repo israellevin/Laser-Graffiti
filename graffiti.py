@@ -5,16 +5,15 @@ COLORS = ((0, 0, 0, 127),
           (0, 127, 0, 127),
           (0, 127, 127, 127),
           (127, 0, 0, 127),
-          (127, 0, 127, 127),
+          (127, 0, 40, 0),
           (127, 127, 0, 127),
           (127, 127, 127, 127))
 
 THRESHOLDS = ([.8, 0, 0],)
-#              [1, 1, 1],
+#              [1, 1, 1],)
 #              [1, 1, 1])
 
 # CONSTANTS END - do not modify further down #
-
 
 import sys
 import math
@@ -24,6 +23,8 @@ import pyglet
 import ImageChops
 import VideoCapture
 from pywidget import slider
+
+LASTDOT = (0, 0, 0)
 
 def frange(start, stop, step):
     i = start
@@ -85,7 +86,7 @@ class Projection:
                 ('v2i', (0, 0, 0, self.height, self.width, self.height, self.width, 0)),
                 ('c4b', (r, g, b, 127) * 4))
 
-    def draw(self, x = False, y = False, size = 40, sides = 16, rgb = (0, 0, 0)):
+    def draw(self, x = False, y = False, size = 4, sides = 16, rgb = (0, 0, 0)):
         if False != x and False != y:
             coords = []
             for i in range(sides):
@@ -95,6 +96,16 @@ class Projection:
             pyglet.graphics.draw(len(coords) / 2, pyglet.gl.GL_TRIANGLE_FAN,
                 ('v2i', coords),
                 ('c4b', (rgb[0], rgb[1], rgb[2], 127) * 16))
+            global LASTDOT
+            if time.time() - LASTDOT[0] < 0.25:
+                    pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
+                    ('v2i', (LASTDOT[1] - size, LASTDOT[2] - size,
+                             LASTDOT[1] + size, LASTDOT[2] + size,
+                             x + size, y + size,
+                             x - size, y - size)),
+                    ('c4b', (rgb[0], rgb[1], rgb[2], 127) * 4))
+
+            LASTDOT = (time.time(), x, y)
 
 projection = Projection()
 
@@ -320,16 +331,16 @@ def update(dt):
         return
 
     if False == quad.matrix:
+        projection.wipescreen(127, 127, 127)
         gui.draw()
     else:
-        gui.draw()
         gui.project()
 
     #gui.switch_to()
     #gui.img.blit(0, 0)
     #fps_display.draw()
 
-fps_display = pyglet.clock.ClockDisplay()
-fps_display.label.color = (127, 127, 0, 2)
+#fps_display = pyglet.clock.ClockDisplay()
+#fps_display.label.color = (127, 127, 0, 2)
 pyglet.clock.schedule(update)
 pyglet.app.run()
