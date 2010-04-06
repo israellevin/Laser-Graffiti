@@ -9,7 +9,7 @@ COLORS = ((0, 0, 0, 127),
           (127, 127, 0, 127),
           (127, 127, 127, 127))
 
-THRESHOLDS = ([.8, .8, .8],)
+THRESHOLDS = ([.8, 0, 0],)
 #              [1, 1, 1],
 #              [1, 1, 1])
 
@@ -229,11 +229,6 @@ class Colorctl():
         self.grn = Colslider(self, 1)
         self.blu = Colslider(self, 2)
     def draw(self):
-        if False != quad.matrix:
-            p = quad.getpoint(self.threshold)
-            if False != p:
-                projection.draw(p.x, p.y, rgb = COLORS[self.color])
-        #else:
         self.img = cam.getPygImage(self.threshold)
         colors = [b for c in COLORS for i in range(4) for b in c]
         coords = []
@@ -248,6 +243,11 @@ class Colorctl():
                 ('v2i', coords),
                 ('c4b', colors))
         self.img.blit(self.x, 0)
+
+    def project(self):
+        p = quad.getpoint(self.threshold)
+        if False != p:
+            projection.draw(p.x, p.y, rgb = COLORS[self.color])
 
 class Gui(pyglet.window.Window):
     def __init__(self):
@@ -270,8 +270,11 @@ class Gui(pyglet.window.Window):
         if button == pyglet.window.mouse.RIGHT:
             if False == quad.matrix:
                 quad.calculate()
+                gui.wipescreen()
+                projection.wipescreen()
             else:
                 quad.matrix = False
+                projection.wipescreen(127, 127, 127)
             return pyglet.event.EVENT_HANDLED
         if button == pyglet.window.mouse.LEFT:
             if x > 0 and y > 0 and y < cam.height and x < cam.width:
@@ -290,12 +293,23 @@ class Gui(pyglet.window.Window):
     def on_mouse_drag(self, x, y, dx, dy, button, modifiers):
         self.on_mouse(x, y, button, modifiers)
 
+    def wipescreen(self, r = 0, g = 0, b = 0):
+        self.switch_to()
+        pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
+                ('v2i', (0, 0, 0, cam.height, self.width, cam.height, self.width, 0)),
+                ('c4b', (r, g, b, 127) * 4))
+
     def draw(self):
         self.img = cam.getPygImage()
         gui.switch_to()
         self.img.blit(0, 0)
-        for color in self.colorctls:
-            color.draw()
+        quad.draw()
+        for colorctl in self.colorctls:
+            colorctl.draw()
+
+    def project(self):
+        for colorctl in self.colorctls:
+            colorctl.project()
 
 gui = Gui()
 
@@ -305,18 +319,17 @@ def update(dt):
         pyglet.app.exit()
         return
 
-    gui.draw()
-
     if False == quad.matrix:
-        projection.wipescreen(127, 127, 127)
-        quad.draw()
+        gui.draw()
     else:
-        for color in gui.colorctls:
-            color.draw()
+        gui.draw()
+        gui.project()
 
     #gui.switch_to()
+    #gui.img.blit(0, 0)
     #fps_display.draw()
 
-#fps_display = pyglet.clock.ClockDisplay()
+fps_display = pyglet.clock.ClockDisplay()
+fps_display.label.color = (127, 127, 0, 2)
 pyglet.clock.schedule(update)
 pyglet.app.run()
