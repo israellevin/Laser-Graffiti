@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # CONSTANTS - modify this part only #
 CAMNUM = 0
 COLORS = ((0, 0, 0, 127),
@@ -9,15 +10,12 @@ COLORS = ((0, 0, 0, 127),
           (31, 63, 127, 127),
           (127, 127, 127, 127))
 BRUSHSIZE = 5
-THRESHOLDS = ([.8, 0, 0],)
-#              [1, 1, 1],)
-#              [1, 1, 1])
+THRESHOLDS = ([.8], [.8], [.8])
 
 # CONSTANTS END - do not modify further down #
 
 import sys
 import math
-import time
 import Image
 import pyglet
 import ImageChops
@@ -41,7 +39,7 @@ class Cam(VideoCapture.Device):
         self.mode = img.mode
         self.pitch = -1 * self.width * len(self.mode)
 
-    def getPygImage(self, th = False):
+    def getPygImage(self, th = False, color = 0):
         img = self.getImage()
         w = self.width
         h = self.height
@@ -52,9 +50,19 @@ class Cam(VideoCapture.Device):
         else:
             th = [255.0 * x for x in th]
             r, g, b = img.split()
-            r = Image.eval(r, lambda i: 255 if i < th[0] else 0)
-            g = Image.eval(g, lambda i: 255 if i < th[1] else 0)
-            b = Image.eval(b, lambda i: 255 if i < th[2] else 0)
+            if 0 == color:
+                r = Image.eval(r, lambda i: 255 if i < th[0] else 0)
+                g = Image.eval(g, lambda i: 255 if i > th[0] else 0)
+                b = Image.eval(b, lambda i: 255 if i > th[0] else 0)
+            elif 1 == color:
+                r = Image.eval(r, lambda i: 255 if i > th[0] else 0)
+                g = Image.eval(g, lambda i: 255 if i < th[0] else 0)
+                b = Image.eval(b, lambda i: 255 if i > th[0] else 0)
+            else:
+                r = Image.eval(r, lambda i: 255 if i > th[0] else 0)
+                g = Image.eval(g, lambda i: 255 if i > th[0] else 0)
+                b = Image.eval(b, lambda i: 255 if i < th[0] else 0)
+
             m = img.mode
             i = Image.merge(m, (r, g, b))
             d = i.tostring()
@@ -97,7 +105,7 @@ class Projection:
             pyglet.graphics.draw(len(coords) / 2, pyglet.gl.GL_TRIANGLE_FAN,
                 ('v2i', coords),
                 ('c4b', (rgb[0], rgb[1], rgb[2], 127) * 16))
-            if time.time() - colctl.lastdot[0] < .25:
+            if time() - colctl.lastdot[0] < .25:
                 x1 = colctl.lastdot[1]
                 y1 = colctl.lastdot[2]
                 if x != x1 or y != y1:
@@ -118,7 +126,7 @@ class Projection:
                     ('v2i', (a1x, a1y, a2x, a2y, b2x, b2y, b1x, b1y)),
                     ('c4b', (rgb[0], rgb[1], rgb[2], 127) * 4))
 
-            colctl.lastdot = (time.time(), x, y)
+            colctl.lastdot = (time(), x, y)
 
 projection = Projection()
 
@@ -240,22 +248,26 @@ class Colslider(slider.Slider):
         @self.event
         def on_value_change(slider):
             self.parent.threshold[slider.idx] = slider.value
-            self.parent.parent.clear()
-            self.parent.parent.draw()
 
 class Colorctl():
-    def __init__(self, threshold, color, parent):
+    def __init__(self, idx, threshold, color, parent):
+        self.idx = idx
         self.threshold = threshold[:]
         self.color = color
         self.parent = parent
-        self.img = cam.getPygImage(self.threshold)
+        self.img = cam.getPygImage(self.threshold, self.idx)
         self.x = cam.width * (1 + len(parent.colorctls))
-        self.red = Colslider(self, 0)
-        self.grn = Colslider(self, 1)
-        self.blu = Colslider(self, 2)
+        self.sld = Colslider(self, 0)
         self.lastdot = (0, 0, 0)
     def draw(self):
-        self.img = cam.getPygImage(self.threshold)
+        self.img = cam.getPygImage(self.threshold, self.idx)
+        pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
+                ('v2i', (
+                    self.x, cam.height,
+                    self.x, cam.height + 70,
+                    self.x + cam.width, cam.height + 70,
+                    self.x + cam.width, cam.height)),
+                ('c4b', (0, 0, 0, 127) * 4))
         colors = [b for c in COLORS for i in range(4) for b in c]
         coords = []
         for i in range(8):
@@ -269,6 +281,7 @@ class Colorctl():
                 ('v2i', coords),
                 ('c4b', colors))
         self.img.blit(self.x, 0)
+        self.sld.draw()
 
     def project(self):
         p = quad.getpoint(self.threshold)
@@ -279,23 +292,23 @@ class Gui(pyglet.window.Window):
     def __init__(self):
         self.img = cam.getPygImage()
         self.colorctls = []
-        for th in THRESHOLDS:
-            self.colorctls.append(Colorctl(th, 0, self))
+        for idx, th in enumerate(THRESHOLDS):
+            self.colorctls.append(Colorctl(idx, th, 0, self))
         pyglet.window.Window.__init__(self,
                 width = cam.width * (1 + len(self.colorctls)),
-                height = cam.height + 130)
+                height = cam.height + 70)
 
     def on_draw(self):
         pyglet.graphics.draw(8, pyglet.gl.GL_QUADS,
-                ('v2i', (0, self.height, cam.width, self.height, cam.width, self.height - 65, 0, self.height - 65,
-                         0, self.height - 65, cam.width, self.height - 65, cam.width, cam.height, 0, cam.height)),
+                ('v2i', (0, self.height, cam.width, self.height, cam.width, self.height - 35, 0, self.height - 35,
+                         0, self.height - 35, cam.width, self.height - 35, cam.width, cam.height, 0, cam.height)),
                 ('c4b', (0, 50, 0, 127) * 4 + (50, 0, 0, 127) * 4))
-        self.btncap = pyglet.text.Label('+', font_size = 36, color = (200, 255, 200, 255))
+        self.btncap = pyglet.text.Label('+', font_size = 24, color = (200, 255, 200, 255))
         self.btnlod = pyglet.text.Label('-', font_size = 36, color = (255, 200, 200, 255))
         self.btncap.x = cam.width / 2 - 10
         self.btnlod.x = cam.width / 2 - 5
-        self.btncap.y = cam.height + 80
-        self.btnlod.y = cam.height + 20
+        self.btncap.y = cam.height + 40
+        self.btnlod.y = cam.height + 4
         self.btncap.draw()
         self.btnlod.draw()
 
@@ -312,11 +325,12 @@ class Gui(pyglet.window.Window):
             if len(self.colorctls) > 1:
                 self.colorctls.pop()
                 self.set_size(cam.width * (1 + len(self.colorctls)),
-                              height = cam.height + 130)
+                              height = cam.height + 70)
         elif symbol == pyglet.window.key.EQUAL:
-                self.colorctls.append(Colorctl([128, 128, 128], 0, self))
+            if len(self.colorctls) < 3:
+                self.colorctls.append(Colorctl(len(self.colorctls), [128, 128, 128], 0, self))
                 self.set_size(cam.width * (1 + len(self.colorctls)),
-                              height = cam.height + 130)
+                              height = cam.height + 70)
         elif symbol == pyglet.window.key._0:
             if projection.brushsize >= 5:
                 projection.brushsize += 5
@@ -355,15 +369,16 @@ class Gui(pyglet.window.Window):
 
     def on_mouse_press(self, x, y, button, modifiers):
         if x < cam.width and y > cam.height:
-            if y > cam.height + 65:
-                self.colorctls.append(Colorctl([128, 128, 128], 0, self))
-                self.set_size(cam.width * (1 + len(self.colorctls)),
-                              height = cam.height + 130)
+            if y > cam.height + 35:
+                if len(self.colorctls) < 3:
+                    self.colorctls.append(Colorctl(len(self.colorctls), [128, 128, 128], 0, self))
+                    self.set_size(cam.width * (1 + len(self.colorctls)),
+                                  height = cam.height + 70)
             else:
                 if len(self.colorctls) > 1:
                     self.colorctls.pop()
                     self.set_size(cam.width * (1 + len(self.colorctls)),
-                                  height = cam.height + 130)
+                                  height = cam.height + 70)
             return pyglet.event.EVENT_HANDLED
         self.on_mouse(x, y, button, modifiers)
 
