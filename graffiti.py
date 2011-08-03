@@ -1,19 +1,6 @@
 #!/usr/bin/python
-# CONSTANTS - modify this part only #
-CAMNUM = 0
-COLORS = ((0, 0, 0, 127),
-          (127, 0, 0, 127),
-          (0, 127, 0, 127),
-          (0, 0, 127, 127),
-          (127, 63, 0, 127),
-          (127, 80, 0, 127),
-          (31, 63, 127, 127),
-          (127, 127, 127, 127))
-BRUSHSIZE = 5
-THRESHOLDS = ([.8], [.8], [.8])
 
-# CONSTANTS END - do not modify further down #
-
+import re
 import sys
 import math
 import Image
@@ -22,6 +9,63 @@ import ImageChops
 import VideoCapture
 from time import time
 from pywidget import slider
+
+class Ini():
+    def __init__(self, fname):
+        self.fname = fname
+        self.camnum = 0
+        self.savedir = 'saved'
+        self.colors = [(0, 0, 0),
+                      (127, 0, 0),
+                      (0, 127, 0),
+                      (0, 0, 127),
+                      (127, 63, 0),
+                      (127, 80, 0),
+                      (31, 63, 127),
+                      (127, 127, 127)]
+        self.thresholds = ([.8], [.8], [.8])
+        try:
+            f = open(self.fname, 'r')
+            s = f.read()
+            f.close()
+            p = re.search('(?<=camnum:).*', s)
+            if(p): self.camnum = int(p.group(0).strip())
+            p = re.search('(?<=savedir:).*', s)
+            if(p): self.savedir = p.group(0).strip()
+            colors = re.findall('(?<=color:).*', s)
+            for cidx, color in enumerate(colors):
+                if cidx > 7:
+                    print 'Too many colors in ini file'
+                    break
+                r, g, b = color.split(',')
+                self.colors[cidx] = (int(r), int(g), int(b))
+            thresholds = re.findall('(?<=threshold:).*', s)
+            if len(thresholds) > 0:
+                self.thresholds = []
+                for threshold in thresholds:
+                    self.thresholds.append(float(threshold))
+        except IOError:
+            print('No ini file found')
+    def write(self):
+        s = "camnum:%i\nsavedir:%s\n" % (self.camnum, self.savedir)
+        for color in self.colors:
+            s+= "color:%i,%i,%i\n" % color
+        ths = [ctl.threshold for ctl in gui.colorctls] if None != gui else self.thresholds
+        for threshold in ths:
+            s+= "threshold:%f\n" % (threshold)
+        try:
+            f = open(self.fname, 'w')
+            f.write(s)
+            f.close()
+        except IOError:
+            print('Unable to write file ' + self.fname)
+
+ini = Ini('local.ini')
+COLORS = []
+for color in ini.colors:
+    COLORS.append(color + (127,))
+BRUSHSIZE = 5
+
 
 def frange(start, stop, step):
     i = start
@@ -32,7 +76,7 @@ def frange(start, stop, step):
 
 class Cam(VideoCapture.Device):
     def __init__(self, camnum = 0):
-        VideoCapture.Device.__init__(self, camnum)
+        VideoCapture.Device.__init__(self, ini.camnum)
         img = self.getImage()
         self.size = img.size
         self.width, self.height = self.size
@@ -48,20 +92,20 @@ class Cam(VideoCapture.Device):
             d = img.tostring()
             p = self.pitch
         else:
-            th = [255.0 * x for x in th]
+            th = 255.0 * th
             r, g, b = img.split()
             if 0 == color:
-                r = Image.eval(r, lambda i: 255 if i < th[0] else 0)
-                g = Image.eval(g, lambda i: 255 if i > th[0] else 0)
-                b = Image.eval(b, lambda i: 255 if i > th[0] else 0)
+                r = Image.eval(r, lambda i: 255 if i < th else 0)
+                g = Image.eval(g, lambda i: 255 if i > th else 0)
+                b = Image.eval(b, lambda i: 255 if i > th else 0)
             elif 1 == color:
-                r = Image.eval(r, lambda i: 255 if i > th[0] else 0)
-                g = Image.eval(g, lambda i: 255 if i < th[0] else 0)
-                b = Image.eval(b, lambda i: 255 if i > th[0] else 0)
+                r = Image.eval(r, lambda i: 255 if i > th else 0)
+                g = Image.eval(g, lambda i: 255 if i < th else 0)
+                b = Image.eval(b, lambda i: 255 if i > th else 0)
             else:
-                r = Image.eval(r, lambda i: 255 if i > th[0] else 0)
-                g = Image.eval(g, lambda i: 255 if i > th[0] else 0)
-                b = Image.eval(b, lambda i: 255 if i < th[0] else 0)
+                r = Image.eval(r, lambda i: 255 if i > th else 0)
+                g = Image.eval(g, lambda i: 255 if i > th else 0)
+                b = Image.eval(b, lambda i: 255 if i < th else 0)
 
             m = img.mode
             i = Image.merge(m, (r, g, b))
@@ -87,6 +131,10 @@ class Projection:
             self.win = pyglet.window.Window(fullscreen = True, screen = self.screen, config = t)
         else:
             self.win = pyglet.window.Window(self.width, self.height, config = t)
+
+    def save(self, name):
+        self.win.switch_to()
+        self.img.save(name)
 
     def wipescreen(self, r = 0, g = 0, b = 0):
         self.win.switch_to()
@@ -219,9 +267,9 @@ class Quad:
         for point in self.matrix:
             cami = -3 * ((point[1] * cam.width) - point[0])
             try:
-                if ord(img[cami]) > 255.0 * threshold[0]:
-                    if ord(img[cami + 1]) > 255.0 * threshold[1]:
-                        if ord(img[cami + 2]) > 255.0 * threshold[2]:
+                if ord(img[cami]) > 255.0 * threshold:
+                    if ord(img[cami + 1]) > 255.0 * threshold:
+                        if ord(img[cami + 2]) > 255.0 * threshold:
                             detectedxs.append(point[2])
                             detectedys.append(point[3])
             except IndexError:
@@ -242,17 +290,17 @@ class Colslider(slider.Slider):
         slider.Slider.__init__(self,
                 x = (len(parent.parent.colorctls) + 1) * cam.width,
                 y = cam.height + (idx * 30) + 40,
-                width = cam.width, value = parent.threshold[idx])
+                width = cam.width, value = parent.threshold)
         self.parent.parent.push_handlers(self)
 
         @self.event
         def on_value_change(slider):
-            self.parent.threshold[slider.idx] = slider.value
+            self.parent.threshold = slider.value
 
 class Colorctl():
     def __init__(self, idx, threshold, color, parent):
         self.idx = idx
-        self.threshold = threshold[:]
+        self.threshold = threshold
         self.color = color
         self.parent = parent
         self.img = cam.getPygImage(self.threshold, self.idx)
@@ -292,7 +340,7 @@ class Gui(pyglet.window.Window):
     def __init__(self):
         self.img = cam.getPygImage()
         self.colorctls = []
-        for idx, th in enumerate(THRESHOLDS):
+        for idx, th in enumerate(ini.thresholds):
             self.colorctls.append(Colorctl(idx, th, 0, self))
         pyglet.window.Window.__init__(self,
                 width = cam.width * (1 + len(self.colorctls)),
@@ -313,14 +361,23 @@ class Gui(pyglet.window.Window):
         self.btnlod.draw()
 
     def on_close(self):
+        ini.write()
         pyglet.app.exit()
 
     def on_key_press(self, symbol, modifiers):
         if symbol == pyglet.window.key.ESCAPE:
+            ini.write()
             pyglet.app.exit()
         elif symbol == pyglet.window.key.SPACE:
+            #projection.win.switch_to()
+            #b = pyglet.image.get_buffer_manager().get_color_buffer()
+            #b.save("%s/%i.png" % (ini.savedir, time()))
+            #projection.img.texture.save("screencap.%i.jpg" % (time()))
+            #i = projection.img.create_texture(pyglet.image.Texture)
+            #i.save('stam')
+            #Image.fromstring(i.format
+            projection.save("screencap.%i.jpg" % (time()))
             projection.wipescreen()
-            projection.img.save("screencap.%i.png" % (time()))
         elif symbol == pyglet.window.key.MINUS:
             if len(self.colorctls) > 1:
                 self.colorctls.pop()
@@ -328,7 +385,7 @@ class Gui(pyglet.window.Window):
                               height = cam.height + 70)
         elif symbol == pyglet.window.key.EQUAL:
             if len(self.colorctls) < 3:
-                self.colorctls.append(Colorctl(len(self.colorctls), [128, 128, 128], 0, self))
+                self.colorctls.append(Colorctl(len(self.colorctls), 0.8, 0, self))
                 self.set_size(cam.width * (1 + len(self.colorctls)),
                               height = cam.height + 70)
         elif symbol == pyglet.window.key._0:
@@ -371,7 +428,7 @@ class Gui(pyglet.window.Window):
         if x < cam.width and y > cam.height:
             if y > cam.height + 35:
                 if len(self.colorctls) < 3:
-                    self.colorctls.append(Colorctl(len(self.colorctls), [128, 128, 128], 0, self))
+                    self.colorctls.append(Colorctl(len(self.colorctls), 0.8, 0, self))
                     self.set_size(cam.width * (1 + len(self.colorctls)),
                                   height = cam.height + 70)
             else:
@@ -408,6 +465,7 @@ gui = Gui()
 
 def update(dt):
     if gui.has_exit or projection.win.has_exit:
+        ini.write()
         pyglet.app.exit()
         return
 
