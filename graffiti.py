@@ -1,14 +1,14 @@
 # CONSTANTS - modify this part only #
-
+CAMNUM = 0
 COLORS = ((0, 0, 0, 127),
-          (0, 0, 127, 127),
-          (0, 127, 0, 127),
-          (0, 127, 127, 127),
           (127, 0, 0, 127),
-          (127, 0, 40, 0),
-          (127, 127, 0, 127),
+          (0, 127, 0, 127),
+          (0, 0, 127, 127),
+          (127, 63, 0, 127),
+          (127, 80, 0, 127),
+          (31, 63, 127, 127),
           (127, 127, 127, 127))
-
+BRUSHSIZE = 5
 THRESHOLDS = ([.8, 0, 0],)
 #              [1, 1, 1],)
 #              [1, 1, 1])
@@ -22,9 +22,8 @@ import Image
 import pyglet
 import ImageChops
 import VideoCapture
+from time import time
 from pywidget import slider
-
-LASTDOT = (0, 0, 0)
 
 def frange(start, stop, step):
     i = start
@@ -34,8 +33,8 @@ def frange(start, stop, step):
 
 
 class Cam(VideoCapture.Device):
-    def __init__(self):
-        VideoCapture.Device.__init__(self)
+    def __init__(self, camnum = 0):
+        VideoCapture.Device.__init__(self, camnum)
         img = self.getImage()
         self.size = img.size
         self.width, self.height = self.size
@@ -74,6 +73,7 @@ class Projection:
         self.mode = cam.mode
         self.pitch = -1 * self.width * len(self.mode)
         self.img = pyglet.image.ImageData(self.width, self.height, self.mode, (0) * self.mode * self.width * self.height)
+        self.brushsize = BRUSHSIZE
         t = pyglet.gl.Config(double_buffer = False)
         if len(screens) > 1:
             self.win = pyglet.window.Window(fullscreen = True, screen = self.screen, config = t)
@@ -86,26 +86,39 @@ class Projection:
                 ('v2i', (0, 0, 0, self.height, self.width, self.height, self.width, 0)),
                 ('c4b', (r, g, b, 127) * 4))
 
-    def draw(self, x = False, y = False, size = 4, sides = 16, rgb = (0, 0, 0)):
+    def draw(self, colctl, x = False, y = False, sides = 16):
         if False != x and False != y:
             coords = []
             for i in range(sides):
-                coords.append(int(round(x + size * math.cos(i * 2 * math.pi / sides))))
-                coords.append(int(round(y + size * math.sin(i * 2 * math.pi / sides))))
+                coords.append(int(round(x + self.brushsize * math.cos(i * 2 * math.pi / sides))))
+                coords.append(int(round(y + self.brushsize * math.sin(i * 2 * math.pi / sides))))
             self.win.switch_to()
+            rgb = COLORS[colctl.color]
             pyglet.graphics.draw(len(coords) / 2, pyglet.gl.GL_TRIANGLE_FAN,
                 ('v2i', coords),
                 ('c4b', (rgb[0], rgb[1], rgb[2], 127) * 16))
-            global LASTDOT
-            if time.time() - LASTDOT[0] < 0.25:
+            if time.time() - colctl.lastdot[0] < .25:
+                x1 = colctl.lastdot[1]
+                y1 = colctl.lastdot[2]
+                if x != x1 or y != y1:
+                    angle = 1 if x == x1 else math.atan(1.0 * (y - y1) / (x - x1))
+                    angle += .5 * math.pi
+                    a1x = int(round(x + self.brushsize * math.cos(angle)))
+                    a1y = int(round(y + self.brushsize * math.sin(angle)))
+                    angle += math.pi
+                    a2x = int(round(x + self.brushsize * math.cos(angle)))
+                    a2y = int(round(y + self.brushsize * math.sin(angle)))
+                    angle += math.pi
+                    b1x = int(round(x1 + self.brushsize * math.cos(angle)))
+                    b1y = int(round(y1 + self.brushsize * math.sin(angle)))
+                    angle += math.pi
+                    b2x = int(round(x1 + self.brushsize * math.cos(angle)))
+                    b2y = int(round(y1 + self.brushsize * math.sin(angle)))
                     pyglet.graphics.draw(4, pyglet.gl.GL_QUADS,
-                    ('v2i', (LASTDOT[1] - size, LASTDOT[2] - size,
-                             LASTDOT[1] + size, LASTDOT[2] + size,
-                             x + size, y + size,
-                             x - size, y - size)),
+                    ('v2i', (a1x, a1y, a2x, a2y, b2x, b2y, b1x, b1y)),
                     ('c4b', (rgb[0], rgb[1], rgb[2], 127) * 4))
 
-            LASTDOT = (time.time(), x, y)
+            colctl.lastdot = (time.time(), x, y)
 
 projection = Projection()
 
@@ -216,18 +229,19 @@ quad = Quad()
 
 class Colslider(slider.Slider):
     def __init__(self, parent, idx):
+        self.parent = parent
         self.idx = idx
         slider.Slider.__init__(self,
                 x = (len(parent.parent.colorctls) + 1) * cam.width,
                 y = cam.height + (idx * 30) + 40,
                 width = cam.width, value = parent.threshold[idx])
-        parent.parent.push_handlers(self)
+        self.parent.parent.push_handlers(self)
 
         @self.event
         def on_value_change(slider):
-            parent.threshold[slider.idx] = slider.value
-            parent.parent.clear()
-            parent.parent.draw()
+            self.parent.threshold[slider.idx] = slider.value
+            self.parent.parent.clear()
+            self.parent.parent.draw()
 
 class Colorctl():
     def __init__(self, threshold, color, parent):
@@ -239,6 +253,7 @@ class Colorctl():
         self.red = Colslider(self, 0)
         self.grn = Colslider(self, 1)
         self.blu = Colslider(self, 2)
+        self.lastdot = (0, 0, 0)
     def draw(self):
         self.img = cam.getPygImage(self.threshold)
         colors = [b for c in COLORS for i in range(4) for b in c]
@@ -258,7 +273,7 @@ class Colorctl():
     def project(self):
         p = quad.getpoint(self.threshold)
         if False != p:
-            projection.draw(p.x, p.y, rgb = COLORS[self.color])
+            projection.draw(self, p.x, p.y)
 
 class Gui(pyglet.window.Window):
     def __init__(self):
@@ -270,12 +285,50 @@ class Gui(pyglet.window.Window):
                 width = cam.width * (1 + len(self.colorctls)),
                 height = cam.height + 130)
 
+    def on_draw(self):
+        pyglet.graphics.draw(8, pyglet.gl.GL_QUADS,
+                ('v2i', (0, self.height, cam.width, self.height, cam.width, self.height - 65, 0, self.height - 65,
+                         0, self.height - 65, cam.width, self.height - 65, cam.width, cam.height, 0, cam.height)),
+                ('c4b', (0, 50, 0, 127) * 4 + (50, 0, 0, 127) * 4))
+        self.btncap = pyglet.text.Label('+', font_size = 36, color = (200, 255, 200, 255))
+        self.btnlod = pyglet.text.Label('-', font_size = 36, color = (255, 200, 200, 255))
+        self.btncap.x = cam.width / 2 - 10
+        self.btnlod.x = cam.width / 2 - 5
+        self.btncap.y = cam.height + 80
+        self.btnlod.y = cam.height + 20
+        self.btncap.draw()
+        self.btnlod.draw()
+
     def on_close(self):
         pyglet.app.exit()
 
     def on_key_press(self, symbol, modifiers):
         if symbol == pyglet.window.key.ESCAPE:
             pyglet.app.exit()
+        elif symbol == pyglet.window.key.SPACE:
+            projection.wipescreen()
+            projection.img.save("screencap.%i.png" % (time()))
+        elif symbol == pyglet.window.key.MINUS:
+            if len(self.colorctls) > 1:
+                self.colorctls.pop()
+                self.set_size(cam.width * (1 + len(self.colorctls)),
+                              height = cam.height + 130)
+        elif symbol == pyglet.window.key.EQUAL:
+                self.colorctls.append(Colorctl([128, 128, 128], 0, self))
+                self.set_size(cam.width * (1 + len(self.colorctls)),
+                              height = cam.height + 130)
+        elif symbol == pyglet.window.key._0:
+            if projection.brushsize >= 5:
+                projection.brushsize += 5
+            elif projection.brushsize >= 1:
+                projection.brushsize += 1
+        elif symbol == pyglet.window.key._9:
+            if projection.brushsize > 5:
+                projection.brushsize -= 5
+            elif projection.brushsize > 1:
+                projection.brushsize -= 1
+        elif symbol >= pyglet.window.key._1 and symbol <= pyglet.window.key._8:
+            self.colorctls[0].color = symbol - 49
 
     def on_mouse(self, x, y, button, modifiers):
         if button == pyglet.window.mouse.RIGHT:
@@ -288,17 +341,30 @@ class Gui(pyglet.window.Window):
                 projection.wipescreen(127, 127, 127)
             return pyglet.event.EVENT_HANDLED
         if button == pyglet.window.mouse.LEFT:
-            if x > 0 and y > 0 and y < cam.height and x < cam.width:
-                quad.moveCorner(x, y)
-                return pyglet.event.EVENT_HANDLED
-            elif x > cam.width and y > cam.height and y - cam.height < 30:
-                ctli = (x / cam.width) - 1
-                coli = x % cam.width / (cam.width / 8)
-                self.colorctls[ctli].color = coli
-            else:
-                return pyglet.event.EVENT_UNHANDLED
+            if x > 0 and y > 0:
+                if x < cam.width and y < cam.height:
+                    quad.moveCorner(x, y)
+                    return pyglet.event.EVENT_HANDLED
+                elif y > cam.height and y - cam.height < 30:
+                    ctli = (x / cam.width) - 1
+                    coli = x % cam.width / (cam.width / 8)
+                    self.colorctls[ctli].color = coli
+                    return pyglet.event.EVENT_HANDLED
+                else:
+                    return pyglet.event.EVENT_UNHANDLED
 
     def on_mouse_press(self, x, y, button, modifiers):
+        if x < cam.width and y > cam.height:
+            if y > cam.height + 65:
+                self.colorctls.append(Colorctl([128, 128, 128], 0, self))
+                self.set_size(cam.width * (1 + len(self.colorctls)),
+                              height = cam.height + 130)
+            else:
+                if len(self.colorctls) > 1:
+                    self.colorctls.pop()
+                    self.set_size(cam.width * (1 + len(self.colorctls)),
+                                  height = cam.height + 130)
+            return pyglet.event.EVENT_HANDLED
         self.on_mouse(x, y, button, modifiers)
 
     def on_mouse_drag(self, x, y, dx, dy, button, modifiers):
