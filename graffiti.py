@@ -1,15 +1,15 @@
 #!/usr/bin/python
 
+import cv
 import re
 import sys
 import math
 import Image
 import pyglet
-import ImageChops
-import VideoCapture
 from time import time
 from pywidget import slider
 
+# Configuration file
 class Ini():
     def __init__(self, fname):
         self.fname = fname
@@ -23,7 +23,7 @@ class Ini():
                       (127, 80, 0),
                       (31, 63, 127),
                       (127, 127, 127)]
-        self.thresholds = ([.8], [.8], [.8])
+        self.thresholds = (.8, .8, .8)
         try:
             f = open(self.fname, 'r')
             s = f.read()
@@ -66,22 +66,29 @@ for color in ini.colors:
     COLORS.append(color + (127,))
 BRUSHSIZE = 5
 
-
 def frange(start, stop, step):
     i = start
     while i < stop:
         yield i
         i += step
 
-
-class Cam(VideoCapture.Device):
+class Cam():
     def __init__(self, camnum = 0):
-        VideoCapture.Device.__init__(self, ini.camnum)
-        img = self.getImage()
-        self.size = img.size
-        self.width, self.height = self.size
-        self.mode = img.mode
+        self.cam = cv.CaptureFromCAM(0)
+        self.img = cv.QueryFrame(self.cam)
+        while not self.img:
+            print 'Retrying capture'
+            self.img = cv.QueryFrame(self.cam)
+        self.size = self.width, self.height = cv.GetSize(self.img)
+        self.depth = self.img.depth
+        self.nchan = self.img.nChannels
+        print "Got image %s\n%iX%iX%iX%i" % (self.img, self.width, self.height, self.depth, self.nchan)
+
+        self.mode = 'RGB'
         self.pitch = -1 * self.width * len(self.mode)
+
+    def getImage(self):
+            return Image.fromstring(self.mode, self.size, cv.QueryFrame(self.cam).tostring())
 
     def getPygImage(self, th = False, color = 0):
         img = self.getImage()
